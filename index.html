@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>리뷰&스티커 · AI 리뷰 답글 & 감성 스티커 자동화</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Black+Han+Sans&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { navy: { 900:'#0b1b3f', 800:'#132a5e', 700:'#1d3a7a', 500:'#2f5bd3' } },
+      fontFamily: { sans:['Noto Sans KR','sans-serif'], display:['Black Han Sans','Noto Sans KR','sans-serif'] }
+    }}
+  }
+</script>
+<style>
+  body { font-family: 'Noto Sans KR', sans-serif; }
+
+  /* ---------- Background ---------- */
+  .bg-scene {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(47,91,211,.18) 0, transparent 42%),
+      radial-gradient(circle at 88% 82%, rgba(249,115,22,.20) 0, transparent 45%),
+      radial-gradient(circle at 80% 10%, rgba(250,204,21,.18) 0, transparent 35%),
+      linear-gradient(160deg, #f6f8ff 0%, #fffaf3 100%);
+  }
+  .dots {
+    background-image: radial-gradient(rgba(19,42,94,.13) 1.2px, transparent 1.2px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+            mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  }
+  .mesh {
+    background-image:
+      linear-gradient(rgba(47,91,211,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47,91,211,.07) 1px, transparent 1px);
+    background-size: 46px 46px;
+    transform: perspective(600px) rotateX(58deg);
+    transform-origin: bottom;
+    -webkit-mask-image: linear-gradient(to top, #000, transparent 80%);
+            mask-image: linear-gradient(to top, #000, transparent 80%);
+  }
+  .blob { filter: blur(40px); animation: blob 14s ease-in-out infinite; }
+  @keyframes blob {
+    0%,100% { transform: translate(0,0) scale(1); }
+    33% { transform: translate(30px,-20px) scale(1.1); }
+    66% { transform: translate(-20px,20px) scale(.95); }
+  }
+
+  /* ---------- Phone ---------- */
+  .phone {
+    transform: perspective(1400px) rotateY(-10deg) rotateX(4deg);
+    transition: transform .6s cubic-bezier(.2,.8,.2,1);
+    box-shadow:
+      0 50px 80px -20px rgba(11,27,63,.45),
+      0 0 0 10px #0b1b3f,
+      0 0 0 12px #2a3f73;
+  }
+  .phone:hover { transform: perspective(1400px) rotateY(0) rotateX(0) translateY(-6px); }
+
+  .float-a { animation: floatA 5s ease-in-out infinite; }
+  .float-b { animation: floatB 6s ease-in-out infinite; }
+  .float-c { animation: floatA 7s ease-in-out infinite reverse; }
+  @keyframes floatA { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
+  @keyframes floatB { 0%,100% { transform: translateY(0) rotate(3deg); } 50% { transform: translateY(-8px) rotate(-2deg); } }
+
+  /* typing caret */
+  .caret::after { content:'|'; margin-left:1px; color:#f97316; animation: blink .9s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- Printer ---------- */
+  .label-out { animation: printOut 4.2s cubic-bezier(.4,0,.2,1) infinite; transform-origin: top; }
+  @keyframes printOut {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    10%  { opacity: 1; }
+    55%  { transform: translateY(0); }
+    85%  { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(8px); opacity: 0; }
+  }
+  .led { animation: led 1s ease-in-out infinite; }
+  @keyframes led { 50% { opacity: .25; } }
+
+  /* ---------- Badges / CTA ---------- */
+  .badge-card { transition: transform .3s, box-shadow .3s; }
+  .badge-card:hover { transform: translateY(-4px); box-shadow: 0 18px 30px -12px rgba(19,42,94,.25); }
+
+  .cta {
+    background: linear-gradient(135deg, #fb923c 0%, #f97316 50%, #ea580c 100%);
+    box-shadow: 0 8px 0 #c2410c, 0 18px 30px -8px rgba(234,88,12,.55);
+    transition: transform .15s, box-shadow .15s;
+    position: relative; overflow: hidden;
+  }
+  .cta:hover { transform: translateY(-3px); box-shadow: 0 11px 0 #c2410c, 0 24px 36px -8px rgba(234,88,12,.6); }
+  .cta:active { transform: translateY(6px); box-shadow: 0 2px 0 #c2410c, 0 8px 14px -6px rgba(234,88,12,.5); }
+  .cta::before {
+    content:''; position:absolute; top:0; left:-60%; width:40%; height:100%;
+    background: linear-gradient(120deg, transparent, rgba(255,255,255,.45), transparent);
+    animation: shine 3.2s ease-in-out infinite;
+  }
+  @keyframes shine { 0% { left:-60%; } 60%,100% { left:130%; } }
+  .cta .arrow { transition: transform .25s; }
+  .cta:hover .arrow { transform: translateX(6px); }
+
+  .fade-up { opacity: 0; animation: fadeUp .8s ease forwards; }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(18px); } to { opacity:1; transform:none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .fade-up { opacity: 1; }
+  }
+</style>
+</head>
+<body class="bg-scene min-h-screen text-navy-900 overflow-x-hidden">
+
+<!-- background layers -->
+<div class="fixed inset-0 dots pointer-events-none"></div>
+<div class="fixed inset-x-0 bottom-0 h-1/2 mesh pointer-events-none"></div>
+<div class="fixed -top-20 -left-20 w-72 h-72 rounded-full bg-blue-400/30 blob pointer-events-none"></div>
+<div class="fixed -bottom-24 -right-16 w-80 h-80 rounded-full bg-orange-400/30 blob pointer-events-none" style="animation-delay:-6s"></div>
+
+<main class="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-14 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+
+  <!-- ===== Left: Copy ===== -->
+  <section class="text-center lg:text-left order-1">
+    <!-- Logo badge -->
+    <div class="fade-up inline-flex items-center gap-3 bg-white/80 backdrop-blur rounded-full pl-2 pr-4 py-2 shadow-sm border border-white" style="animation-delay:.05s">
+      <span class="relative w-10 h-10 rounded-2xl bg-gradient-to-br from-navy-700 to-navy-500 flex items-center justify-center shadow-md">
+        <i class="fa-solid fa-star text-yellow-300 text-sm"></i>
+        <span class="absolute -bottom-1 -right-1 w-5 h-5 rounded-lg bg-orange-500 flex items-center justify-center shadow">
+          <i class="fa-solid fa-tag text-white text-[9px]"></i>
+        </span>
+      </span>
+      <span class="text-sm font-bold text-navy-800">소상공인 배달 매장 전용 자동화</span>
+    </div>
+
+    <h1 class="fade-up font-display text-6xl sm:text-7xl md:text-8xl mt-6 leading-none tracking-tight" style="animation-delay:.15s">
+      <span class="bg-gradient-to-r from-navy-900 to-navy-500 bg-clip-text text-transparent">리뷰</span><span class="text-orange-500">&amp;</span><span class="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">스티커</span>
+    </h1>
+
+    <p class="fade-up mt-5 text-lg sm:text-xl font-bold text-navy-800" style="animation-delay:.25s">
+      사장님의 <span class="line-through decoration-orange-400 decoration-2 text-slate-400">45분</span>을
+      <span class="relative inline-block text-orange-600">1분<span class="absolute left-0 -bottom-0.5 w-full h-2 bg-yellow-300/60 -z-10 rounded"></span></span>으로!
+    </p>
+    <p class="fade-up mt-2 text-base text-slate-600" style="animation-delay:.3s">AI 리뷰 답글 대행 &amp; 감성 스티커 자동화</p>
+
+    <!-- Feature badges -->
+    <div class="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+      <div class="fade-up badge-card bg-white rounded-3xl p-4 shadow-sm border border-slate-100" style="animation-delay:.4s">
+        <div class="w-10 h-10 rounded-2xl bg-yellow-100 text-yellow-600 flex items-center justify-center"><i class="fa-solid fa-bolt"></i></div>
+        <div class="mt-3 font-black text-navy-900 leading-snug">10초 AI<br class="hidden sm:block"> 리뷰 답글 생성</div>
+      </div>
+      <div class="fade-up badge-card bg-white rounded-3xl p-4 shadow-sm border border-slate-100" style="animation-delay:.5s">
+        <div class="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center"><i class="fa-solid fa-print"></i></div>
+        <div class="mt-3 font-black text-navy-900 leading-snug">원클릭<br class="hidden sm:block"> 감성 스티커 출력</div>
+      </div>
+      <div class="fade-up badge-card bg-white rounded-3xl p-4 shadow-sm border border-slate-100" style="animation-delay:.6s">
+        <div class="w-10 h-10 rounded-2xl bg-blue-100 text-navy-500 flex items-center justify-center"><i class="fa-solid fa-handshake"></i></div>
+        <div class="mt-3 font-black text-navy-900 leading-snug">손 하나 안 대는<br class="hidden sm:block"> 올인원 대행</div>
+      </div>
+    </div>
+
+    <!-- CTA (desktop) -->
+    <div class="hidden lg:block mt-10 fade-up" style="animation-delay:.75s">
+      <a href="app.html" class="cta inline-flex items-center gap-3 text-white font-black text-xl rounded-3xl px-10 py-5">
+        <i class="fa-solid fa-rocket"></i> 시작하기 · 앱 실행하기 <i class="fa-solid fa-arrow-right arrow"></i>
+      </a>
+      <div class="mt-5 flex items-center gap-3 text-sm text-slate-600">
+        <div class="flex -space-x-2">
+          <span class="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-utensils text-xs"></i></span>
+          <span class="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-mug-hot text-xs"></i></span>
+          <span class="w-8 h-8 rounded-full bg-yellow-400 text-navy-900 flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-bowl-food text-xs"></i></span>
+        </div>
+        <span><b class="text-navy-900">소상공인 1,000+ 매장</b> 사용 중</span>
+      </div>
+      <a href="sticker.html" class="inline-block mt-3 text-sm text-navy-500 font-bold hover:underline"><i class="fa-solid fa-tag mr-1"></i>스티커 인쇄기 바로가기</a>
+    </div>
+  </section>
+
+  <!-- ===== Right: Phone Mockup ===== -->
+  <section class="order-2 flex justify-center fade-up" style="animation-delay:.35s">
+    <div class="relative">
+      <!-- floating sticker outside phone -->
+      <div class="float-b absolute -left-10 sm:-left-16 top-20 z-20 hidden sm:block">
+        <div class="bg-white rounded-2xl px-3 py-2 shadow-xl border-2 border-dashed border-navy-900 text-center rotate-[-6deg]">
+          <div class="text-[10px] font-black text-navy-900">맛있게 드시면 5별점!</div>
+          <div class="text-yellow-400 text-xs tracking-tight">★★★★★</div>
+        </div>
+      </div>
+      <div class="float-c absolute -right-6 sm:-right-12 bottom-28 z-20 hidden sm:flex items-center gap-2 bg-navy-900 text-white rounded-2xl px-3 py-2 shadow-xl">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i><span class="text-xs font-bold">답글 등록 완료</span>
+      </div>
+
+      <div class="phone relative w-[290px] sm:w-[320px] h-[600px] sm:h-[640px] rounded-[3rem] bg-gradient-to-b from-slate-50 to-blue-50 overflow-hidden">
+        <!-- notch -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-navy-900 rounded-b-2xl z-30"></div>
+
+        <!-- status bar -->
+        <div class="flex justify-between items-center px-7 pt-2 text-[11px] font-bold text-navy-900">
+          <span>9:41</span>
+          <span class="flex gap-1.5"><i class="fa-solid fa-signal"></i><i class="fa-solid fa-wifi"></i><i class="fa-solid fa-battery-three-quarters"></i></span>
+        </div>
+
+        <!-- app header -->
+        <div class="px-5 mt-5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] text-slate-500">오늘의 리뷰 현황</div>
+            <div class="font-black text-navy-900">맛있는 족발 수원점</div>
+          </div>
+          <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-navy-700 to-navy-500 flex items-center justify-center shadow">
+            <i class="fa-solid fa-star text-yellow-300 text-xs"></i>
+          </span>
+        </div>
+
+        <!-- stat chips -->
+        <div class="px-5 mt-4 grid grid-cols-3 gap-2">
+          <div class="bg-white rounded-2xl p-2 text-center shadow-sm"><div class="text-lg font-black text-navy-900">12</div><div class="text-[10px] text-slate-500">새 리뷰</div></div>
+          <div class="bg-white rounded-2xl p-2 text-center shadow-sm"><div class="text-lg font-black text-orange-500">11</div><div class="text-[10px] text-slate-500">AI 답글</div></div>
+          <div class="bg-white rounded-2xl p-2 text-center shadow-sm"><div class="text-lg font-black text-emerald-500">4.9</div><div class="text-[10px] text-slate-500">평균 별점</div></div>
+        </div>
+
+        <!-- customer review -->
+        <div class="px-5 mt-5 float-a">
+          <div class="bg-white rounded-3xl rounded-tl-md p-3 shadow-md">
+            <div class="flex items-center gap-2 text-[11px]">
+              <span class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center"><i class="fa-solid fa-user text-slate-500 text-[10px]"></i></span>
+              <b class="text-navy-900">족발러버</b><span class="text-yellow-400">★★★★★</span>
+            </div>
+            <p class="text-xs text-slate-600 mt-1.5">족발이 너무 쫄깃하고 막국수도 새콤해요!</p>
+          </div>
+        </div>
+
+        <!-- AI reply bubble (typing) -->
+        <div class="px-5 mt-3 float-b">
+          <div class="ml-6 bg-gradient-to-br from-navy-800 to-navy-500 text-white rounded-3xl rounded-tr-md p-3 shadow-lg">
+            <div class="flex items-center gap-1.5 text-[10px] text-blue-200 font-bold"><i class="fa-solid fa-wand-magic-sparkles"></i> AI 답글 작성 중</div>
+            <p id="typing" class="caret text-xs leading-relaxed mt-1 min-h-[64px]"></p>
+          </div>
+        </div>
+
+        <!-- printer -->
+        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-[240px]">
+          <div class="relative h-[86px] overflow-hidden">
+            <div class="label-out absolute left-1/2 -translate-x-1/2 top-0 w-[170px] bg-white border-2 border-navy-900 rounded-lg px-2 py-1.5 text-center shadow">
+              <div class="bg-navy-900 text-white text-[9px] font-black rounded py-0.5">맛있는 족발 수원점</div>
+              <div class="text-[11px] font-black text-navy-900 mt-1"><i class="fa-solid fa-heart text-[9px]"></i> 사장님이 서비스로 쏜다!</div>
+              <div class="text-[8px] text-slate-500 mt-0.5 border-t border-dashed border-slate-400 pt-0.5">맛있게 드시면 5별점! ⭐⭐⭐⭐⭐</div>
+            </div>
+          </div>
+          <div class="relative -mt-2 h-16 rounded-2xl bg-gradient-to-b from-slate-700 to-navy-900 shadow-xl flex items-center justify-between px-4">
+            <div class="absolute -top-1 left-6 right-6 h-2 rounded-full bg-navy-900"></div>
+            <div class="flex items-center gap-2 text-white">
+              <i class="fa-solid fa-print text-lg text-orange-400"></i>
+              <div class="leading-tight"><div class="text-[11px] font-bold">라벨 출력 중</div><div class="text-[9px] text-slate-300">80 × 50mm</div></div>
+            </div>
+            <span class="led w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA (mobile / tablet) -->
+  <section class="lg:hidden order-3 text-center fade-up" style="animation-delay:.7s">
+    <a href="app.html" class="cta w-full max-w-sm inline-flex items-center justify-center gap-3 text-white font-black text-lg rounded-3xl px-8 py-5">
+      <i class="fa-solid fa-rocket"></i> 시작하기 · 앱 실행하기 <i class="fa-solid fa-arrow-right arrow"></i>
+    </a>
+    <div class="mt-5 flex items-center justify-center gap-3 text-sm text-slate-600">
+      <div class="flex -space-x-2">
+        <span class="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-utensils text-xs"></i></span>
+        <span class="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-mug-hot text-xs"></i></span>
+        <span class="w-8 h-8 rounded-full bg-yellow-400 text-navy-900 flex items-center justify-center ring-2 ring-white"><i class="fa-solid fa-bowl-food text-xs"></i></span>
+      </div>
+      <span><b class="text-navy-900">소상공인 1,000+ 매장</b> 사용 중</span>
+    </div>
+    <a href="sticker.html" class="inline-block mt-3 text-sm text-navy-500 font-bold"><i class="fa-solid fa-tag mr-1"></i>스티커 인쇄기 바로가기</a>
+  </section>
+</main>
+
+<footer class="relative z-10 text-center text-xs text-slate-400 pb-6">© 리뷰&amp;스티커 · 배민 · 요기요 · 쿠팡이츠 사장님을 위한 AI 자동화</footer>
+
+<script>
+  // Typing loop for AI reply bubble
+  const replies = [
+    "족발러버님 반가워요! 🥰 쫄깃한 앞다리 족발과 새콤한 막국수 칭찬에 힘이 납니다. 다음 주문 땐 봉투의 [단골 전용 스티커]를 꼭 확인해 주세요! 🧡",
+    "행복한 한 끼가 되셨다니 정말 뿌듯해요 😊 매일 아침 직접 삶는 보람이 있네요. 또 찾아주시면 서비스로 보답할게요! 🎁"
+  ];
+  const el = document.getElementById('typing');
+  let r = 0, i = 0, deleting = false;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function tick(){
+    const text = replies[r];
+    if (reduce) { el.textContent = text; return; }
+    if (!deleting) {
+      el.textContent = text.slice(0, ++i);
+      if (i === text.length) { deleting = true; return setTimeout(tick, 2600); }
+      setTimeout(tick, 45);
+    } else {
+      el.textContent = text.slice(0, --i);
+      if (i === 0) { deleting = false; r = (r + 1) % replies.length; return setTimeout(tick, 400); }
+      setTimeout(tick, 12);
+    }
+  }
+  setTimeout(tick, 900);
+</script>
+</body>
+</html>

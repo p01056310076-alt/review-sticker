@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 리뷰 대응 대시보드</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Noto Sans KR',sans-serif}
+  .spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+  .spinner.dark{border-color:rgba(15,23,42,.2);border-top-color:#0f172a}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .star-btn{font-size:28px;line-height:1;transition:transform .1s}
+  .star-btn:hover{transform:scale(1.15)}
+  .drop-zone.drag{background:#fff7ed;border-color:#f97316}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+<div class="min-h-screen flex flex-col md:flex-row">
+
+  <!-- ===== Left Sidebar ===== -->
+  <aside class="md:w-72 md:min-h-screen bg-slate-900 text-slate-100 p-4 flex flex-col gap-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto">
+    <div>
+      <h1 class="text-lg font-black tracking-tight"><a href="index.html">🍽️ AI 리뷰 답글 대시보드</a></h1>
+      <p class="text-xs text-slate-400 mt-1">배민 · 요기요 · 쿠팡이츠 리뷰 대행 (1인 운영용)</p>
+    </div>
+
+    <div>
+      <div class="text-xs font-bold text-slate-400 mb-2 px-1">등록 매장</div>
+      <ul id="storeList" class="space-y-1"></ul>
+    </div>
+
+    <button id="toggleStoreForm" class="w-full rounded-lg border border-dashed border-slate-600 py-2 text-sm hover:bg-slate-800 hover:border-orange-400">+ 새 매장 추가</button>
+
+    <form id="storeForm" class="hidden space-y-2 bg-slate-800 rounded-xl p-3">
+      <input type="hidden" id="editingId">
+      <div class="text-sm font-bold" id="storeFormTitle">새 매장 등록</div>
+      <input id="fName" class="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm" placeholder="매장명 (예: 맛있는 족발 수원점)" required>
+      <input id="fPhone" class="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm" placeholder="매장 대표 번호 (예: 031-123-4567)">
+      <input id="fMenu" class="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm" placeholder="대표 메뉴 (쉼표로 구분: 족발, 막국수)">
+      <input id="fOwner" class="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm" placeholder="카톡 호칭 (예: 김사장님)">
+      <div class="grid grid-cols-2 gap-2">
+        <select id="fTone" class="rounded-md bg-slate-900 border border-slate-700 px-2 py-2 text-sm">
+          <option value="friendly">기본톤: 친절 이모지</option>
+          <option value="pride">기본톤: 맛집 자부심</option>
+          <option value="humor">기본톤: 감성 유머</option>
+        </select>
+        <input id="fFee" type="number" min="0" step="1000" class="rounded-md bg-slate-900 border border-slate-700 px-2 py-2 text-sm" placeholder="월 대행료(원)">
+      </div>
+      <textarea id="fMemo" rows="2" class="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm" placeholder="사장님 말투 메모 (예: '~했어요' 말투, 끝인사는 '늘 건강하세요')"></textarea>
+      <div class="flex gap-2">
+        <button type="submit" class="flex-1 rounded-md bg-orange-500 hover:bg-orange-600 py-2 text-sm font-bold">저장</button>
+        <button type="button" id="cancelStore" class="rounded-md bg-slate-700 px-3 text-sm">취소</button>
+      </div>
+    </form>
+
+    <div class="mt-auto space-y-2 pt-4 border-t border-slate-800">
+      <div id="backupWarn" class="hidden text-xs rounded-md bg-amber-500/20 text-amber-200 px-2 py-1.5"></div>
+      <div class="text-xs text-slate-400 px-1" id="totalStat"></div>
+      <div class="flex gap-2">
+        <button id="exportBtn" class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 py-2 text-xs">💾 백업 내려받기</button>
+        <label class="flex-1 rounded-md bg-slate-800 hover:bg-slate-700 py-2 text-xs text-center cursor-pointer">📂 복원
+          <input type="file" id="importFile" accept="application/json" class="hidden">
+        </label>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <main class="flex-1 p-4 md:p-8">
+    <div class="max-w-4xl mx-auto space-y-6">
+
+      <!-- Today's tasks (auto-loaded) -->
+      <section id="taskSection" class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-bold">📋 오늘의 대행 작업 대상</h2>
+          <div id="taskSummary" class="text-xs text-slate-500"></div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          <button id="openImport" class="rounded-xl bg-slate-900 hover:bg-slate-700 text-white py-2.5 text-sm font-bold">📥 리뷰 일괄 가져오기</button>
+          <button id="batchGenBtn" class="rounded-xl bg-orange-500 hover:bg-orange-600 text-white py-2.5 text-sm font-bold disabled:opacity-50">⚡ 미답변 전체 AI 답글</button>
+          <button id="bulkApproveBtn" class="rounded-xl bg-yellow-300 hover:bg-yellow-400 text-slate-900 py-2.5 text-sm font-bold">💬 부정 리뷰 묶음 승인요청</button>
+        </div>
+        <div id="batchProg" class="hidden mb-3">
+          <div class="flex justify-between text-xs text-slate-500 mb-1"><span id="batchLabel"></span><span id="batchPct"></span></div>
+          <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div id="batchBar" class="h-full bg-orange-500 transition-all" style="width:0%"></div></div>
+        </div>
+
+        <div id="alertBar" class="hidden mb-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-bold px-4 py-3"></div>
+        <div id="taskStores" class="flex flex-wrap gap-2 mb-4"></div>
+        <div id="pendingList" class="space-y-3"></div>
+      </section>
+
+      <!-- API Key -->
+      <section class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">🔑 OpenAI API Key</h2>
+          <span id="keyStatus" class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-500">미등록</span>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <div class="relative flex-1">
+            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="sk-로 시작하는 키를 입력하세요">
+            <button id="toggleKey" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">보기</button>
+          </div>
+          <button id="saveKey" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-bold hover:bg-slate-700">저장</button>
+          <button id="clearKey" class="rounded-lg bg-slate-100 px-4 py-2 text-sm hover:bg-slate-200">삭제</button>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">키는 이 브라우저(localStorage)에만 저장됩니다. 공용 PC에서는 사용 후 삭제하세요. · 모델: gpt-4o-mini (답글·텍스트 분석·스크린샷 인식)</p>
+      </section>
+
+      <!-- Store header -->
+      <section id="storeHeader" class="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl p-5 shadow-sm"></section>
+
+      <!-- Generator -->
+      <section id="genSection" class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+        <h2 class="font-bold">✍️ 리뷰 입력 및 AI 답글 생성기 <span class="text-xs font-normal text-slate-400">(한 건씩 직접 작업할 때)</span></h2>
+        <div id="workingBanner" class="hidden"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-bold text-slate-500">배달 플랫폼</label>
+            <select id="platform" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option>배달의민족</option><option>요기요</option><option>쿠팡이츠</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-500">고객 닉네임</label>
+            <input id="nickname" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="예: 족발러버 (비우면 '고객님')">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-bold text-slate-500">고객 리뷰 <span class="font-normal text-slate-400">· Ctrl+Enter = 답글 생성</span></label>
+          <textarea id="reviewText" rows="5" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="리뷰 내용을 그대로 붙여넣으세요."></textarea>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+          <div>
+            <label class="text-xs font-bold text-slate-500">별점</label>
+            <div class="flex items-center gap-1 mt-1" id="stars"></div>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-slate-500">톤앤매너</label>
+            <select id="tone" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <option value="friendly">😊 친절한 이모지형</option>
+              <option value="pride">🔥 맛집 자부심형</option>
+              <option value="humor">😆 감성 유머형</option>
+              <option value="apology">🙏 정중한 사과형</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <button id="queueBtn" class="rounded-xl bg-slate-100 hover:bg-slate-200 py-3 text-sm font-bold" title="지금 답글을 쓰지 않고 미답변 대기열에 저장">📥 대기열 등록</button>
+          <button id="genBtn" class="col-span-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white py-3 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+            <span id="genLabel">✨ AI 답글 생성</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Output -->
+      <section id="outputCard" class="bg-white rounded-2xl shadow-sm p-5 space-y-3 hidden">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold">💬 생성된 답글</h2>
+          <span id="charCount" class="text-xs text-slate-400"></span>
+        </div>
+        <textarea id="replyBox" rows="7" class="w-full rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-400"></textarea>
+        <div id="lintBox" class="flex flex-wrap gap-1.5"></div>
+        <p class="text-xs text-slate-400">필요하면 직접 수정한 뒤 복사하세요. 수정한 내용 그대로 완료 내역에 저장됩니다.</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button id="copyBtn" class="rounded-lg bg-slate-900 text-white py-2.5 text-sm font-bold hover:bg-slate-700">📋 원클릭 복사</button>
+          <button id="regenBtn" class="rounded-lg bg-slate-100 py-2.5 text-sm font-bold hover:bg-slate-200">🔄 다시 생성</button>
+          <button id="doneBtn" class="rounded-lg bg-emerald-500 text-white py-2.5 text-sm font-bold hover:bg-emerald-600">✅ 완료 처리</button>
+        </div>
+      </section>
+
+      <!-- Report & Billing -->
+      <section class="bg-white rounded-2xl shadow-sm p-5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-bold">📊 사장님 리포트 & 월 정산</h2>
+          <select id="repPeriod" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+            <option value="today">오늘</option>
+            <option value="week" selected>최근 7일</option>
+            <option value="month">이번 달</option>
+          </select>
+        </div>
+        <div id="repPreview" class="text-sm whitespace-pre-wrap bg-slate-50 rounded-lg p-3 leading-relaxed"></div>
+        <button id="repCopy" class="w-full rounded-lg bg-yellow-300 hover:bg-yellow-400 text-slate-900 py-2.5 text-sm font-bold">💬 이 매장 리포트 카톡용 복사</button>
+        <div>
+          <div class="text-xs font-bold text-slate-500 mb-2">이번 달 정산 (매장별 처리 건수 · 월 대행료)</div>
+          <div id="billing" class="text-sm"></div>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="bg-white rounded-2xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3 gap-2">
+          <h2 class="font-bold">📁 작성 완료 내역 <span id="histCount" class="text-sm text-slate-400 font-normal"></span></h2>
+          <select id="histFilter" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+            <option value="all">전체</option>
+            <option value="pos">긍정 (4~5점)</option>
+            <option value="neg">부정 (1~3점)</option>
+          </select>
+        </div>
+        <div id="historyList" class="space-y-3"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ===== Import Modal ===== -->
+<div id="importModal" class="hidden fixed inset-0 z-40 bg-black/50 overflow-y-auto">
+  <div class="min-h-full flex items-start md:items-center justify-center p-2 md:p-6">
+    <div class="bg-white rounded-2xl w-full max-w-4xl p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h2 class="font-black text-lg">📥 리뷰 일괄 가져오기</h2>
+        <button id="closeImport" class="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-bold text-slate-500">매장</label>
+          <select id="impStore" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-slate-500">플랫폼</label>
+          <select id="impPlatform" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <option>배달의민족</option><option>요기요</option><option>쿠팡이츠</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex gap-1 bg-slate-100 rounded-xl p-1 text-sm font-bold">
+        <button data-tab="text" class="imp-tab flex-1 rounded-lg py-2">📝 텍스트 붙여넣기</button>
+        <button data-tab="image" class="imp-tab flex-1 rounded-lg py-2">🖼️ 스크린샷 (카톡 캡처 등)</button>
+      </div>
+
+      <div id="tabText" class="space-y-2">
+        <textarea id="impText" rows="8" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="사장님 사이트 리뷰 목록 화면에서 Ctrl+A → Ctrl+C 로 통째로 복사해 여기에 붙여넣으세요. 메뉴·버튼 글자가 섞여도 괜찮습니다."></textarea>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="parseLocal" class="rounded-lg bg-slate-100 hover:bg-slate-200 py-2.5 text-sm font-bold">⚡ 빠른 분석 (무료)</button>
+          <button id="parseAI" class="rounded-lg bg-slate-900 hover:bg-slate-700 text-white py-2.5 text-sm font-bold">🤖 AI 정밀 분석</button>
+        </div>
+        <p class="text-xs text-slate-400">빠른 분석이 잘 안 나뉘면 AI 정밀 분석을 쓰세요. 별점 이미지가 글자로 복사되지 않는 화면은 스크린샷 탭이 정확합니다.</p>
+      </div>
+
+      <div id="tabImage" class="hidden space-y-2">
+        <label id="dropZone" class="drop-zone block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-sm text-slate-500 cursor-pointer">
+          여기에 스크린샷을 <b>끌어다 놓거나</b>, <b>Ctrl+V</b>로 붙여넣거나, 클릭해서 선택하세요<br>
+          <span class="text-xs">사장님이 카톡으로 보낸 리뷰 캡처도 OK · 여러 장 가능</span>
+          <input id="impFiles" type="file" accept="image/*" multiple class="hidden">
+        </label>
+        <div id="impThumbs" class="flex flex-wrap gap-2"></div>
+        <button id="parseImage" class="w-full rounded-lg bg-slate-900 hover:bg-slate-700 text-white py-2.5 text-sm font-bold">🤖 이미지에서 리뷰 추출</button>
+      </div>
+
+      <div id="impStatus" class="text-sm text-slate-500"></div>
+      <div id="impPreview" class="space-y-2 max-h-[45vh] overflow-y-auto"></div>
+
+      <div id="impFooter" class="hidden border-t pt-3 space-y-2">
+        <label class="flex items-center gap-2 text-sm"><input id="impAutoGen" type="checkbox" class="w-4 h-4"> 등록 후 바로 AI 답글 자동 생성</label>
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="impCount" class="text-sm text-slate-600 flex-1"></span>
+          <button id="impRegister" class="rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 text-sm font-bold">선택 항목 대기열 등록</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-white text-sm shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 z-50 max-w-[90vw] text-center"></div>
+
+<script>
+/* ========== Storage ========== */
+const LS = { key:'rr_apiKey', stores:'rr_stores', sel:'rr_selectedStore', hist:'rr_history', draft:'rr_draft', pend:'rr_pending', backup:'rr_lastBackup' };
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){ toast('저장 공간이 부족합니다. 백업 후 오래된 내역을 지워주세요.', 'error'); } };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* 사장님 사이트 바로가기 (주소가 바뀌면 여기만 고치면 됩니다) */
+const OWNER_SITES = [
+  { name:'배민 셀프서비스', url:'https://self.baemin.com' },
+  { name:'요기요 사장님', url:'https://ceo.yogiyo.co.kr' },
+  { name:'쿠팡이츠 스토어', url:'https://store.coupangeats.com' }
+];
+
+let stores = load(LS.stores, null);
+if (!stores) {
+  stores = [
+    { id: uid(), name:'맛있는 족발 수원점', phone:'031-000-0000', menu:'족발, 불족발, 막국수', owner:'', tone:'friendly', fee:0, memo:'' },
+    { id: uid(), name:'행복한 카페', phone:'031-111-1111', menu:'아메리카노, 자몽청 에이드', owner:'', tone:'friendly', fee:0, memo:'' }
+  ];
+  save(LS.stores, stores);
+}
+let selectedId = load(LS.sel, stores[0]?.id || null);
+if (!stores.find(s => s.id === selectedId)) selectedId = stores[0]?.id || null;
+let history = load(LS.hist, []);
+let rating = 5;
+
+/* 미답변 리뷰 대기열 (첫 실행 시 예시 2건) */
+let pending = load(LS.pend, null);
+if (!pending) {
+  const s0 = stores[0]?.id;
+  pending = s0 ? [
+    { id:uid(), storeId:s0, platform:'배달의민족', nickname:'족발러버', rating:5, review:'족발이 너무 쫄깃하고 막국수도 새콤해서 좋았어요!', reply:'', status:'pending', createdAt:Date.now() },
+    { id:uid(), storeId:s0, platform:'쿠팡이츠', nickname:'야식왕', rating:2, review:'배달이 1시간 넘게 걸려서 족발이 다 식어서 왔어요.', reply:'', status:'pending', createdAt:Date.now() }
+  ] : [];
+  save(LS.pend, pending);
+}
+let workingId = null;
+let taskFilter = 'all';
+let batchRunning = false;
+const PLATFORM_BADGE = { '배달의민족':'bg-teal-100 text-teal-700', '요기요':'bg-rose-100 text-rose-700', '쿠팡이츠':'bg-sky-100 text-sky-700' };
+
+const TONES = {
+  friendly: { label:'친절한 이모지형', guide:'밝고 다정한 말투, 이모지를 넉넉히(4~6개) 사용해 따뜻하고 친근하게.' },
+  pride:    { label:'맛집 자부심형', guide:'재료·조리 정성에 대한 자신감과 장인 정신이 느껴지게, 당당하지만 겸손을 잃지 않게. 이모지는 2~4개.' },
+  humor:    { label:'감성 유머형', guide:'가벼운 재치와 센스 있는 비유로 미소 짓게, 과하지 않은 유머. 부정 리뷰일 때는 유머를 빼고 공감 위주로.' },
+  apology:  { label:'정중한 사과형', guide:'격식 있고 정중한 존댓말, 진심 어린 사과 중심. 이모지는 1~2개 이내로 절제.' }
+};
+
+/* ========== Toast ========== */
+let toastTimer;
+function toast(msg, type='ok'){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = t.className.replace(/\bbg-\S+/g,'') + (type==='error' ? ' bg-rose-600' : ' bg-slate-900');
+  t.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.style.opacity = 0, 2800);
+}
+
+/* ========== 리뷰 위험 분류 & 답글 점검 ========== */
+const HYGIENE_RE = /(머리카락|머리털|벌레|바퀴|파리|이물질|비닐|철수세미|플라스틱 조각|배탈|식중독|설사|구토|토했|상했|상한|쉰내|쉰 냄새|곰팡이|덜 익|안 익|날것|핏물)/;
+const ABUSE_RE = /(씨발|시발|ㅅㅂ|ㅆㅂ|병신|ㅂㅅ|개새|개색|좆|존나|졸라|꺼져|미친놈|미친년|망해라|망해버려|사기꾼|쓰레기 ?가게)/;
+function classifyReview(text){
+  const t = String(text || '');
+  return { hygiene: HYGIENE_RE.test(t), abuse: ABUSE_RE.test(t) };
+}
+function lintReply(reply, rating, store){
+  const w = [];
+  const r = String(reply || '');
+  if (!r) return w;
+  if (/(별점|별)\s*(5|다섯|만점)|5\s*(점|별)|[⭐★]{3,}/.test(r)) w.push('별점을 조건으로 한 표현 (삭제 권장)');
+  if (r.length < 100) w.push(`너무 짧음 (${r.length}자)`);
+  if (r.length > 400) w.push(`너무 김 (${r.length}자)`);
+  if (rating <= 3 && store?.phone) {
+    const digits = store.phone.replace(/\D/g,'');
+    if (digits && !r.replace(/\D/g,'').includes(digits)) w.push('대표번호 누락');
+  }
+  if (/(\{|\}|OOO|○○|XXX|\[매장명\]|\[닉네임\])/.test(r)) w.push('미완성 문구(빈칸) 있음');
+  if (/(억지|거짓말|착각하신|잘못 ?아신|이해가 안 ?되네요)/.test(r)) w.push('고객 탓으로 읽힐 표현');
+  if (rating <= 3 && /(환불|무료로|전액|보상해 ?드리겠|쿠폰 ?드리)/.test(r)) w.push('보상 약속 → 사장님 확인 필요');
+  return w;
+}
+function lintChips(list){
+  return list.map(x => `<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">⚠️ ${esc(x)}</span>`).join('');
+}
+function normKey(o){
+  return [o.storeId, o.platform, (o.nickname || '').trim(), String(o.review || '').replace(/\s+/g,'').slice(0, 60)].join('|');
+}
+function isDuplicate(o){
+  const k = normKey(o);
+  return pending.some(p => normKey(p) === k) || history.some(h => normKey(h) === k);
+}
+
+/* ========== Stores ========== */
+const getStore = () => stores.find(s => s.id === selectedId);
+const storeById = id => stores.find(s => s.id === id);
+
+function renderStores(){
+  const ul = $('storeList');
+  if (!stores.length) { ul.innerHTML = '<li class="text-slate-400 text-sm px-2 py-3">등록된 매장이 없습니다.</li>'; }
+  else ul.innerHTML = stores.map(s => {
+    const cnt = history.filter(h => h.storeId === s.id).length;
+    const pc = pending.filter(p => p.storeId === s.id);
+    const pNeg = pc.filter(p => p.rating <= 3).length;
+    const active = s.id === selectedId;
+    const pendTag = pc.length ? ` · <span class="${pNeg ? 'text-rose-300 font-bold' : ''}">미답변 ${pc.length}${pNeg ? ' 🔴' : ''}</span>` : '';
+    return `<li><div data-id="${s.id}" class="flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer ${active?'bg-orange-500 text-white':'hover:bg-slate-800'}">
+      <span class="text-lg">🏪</span>
+      <div class="flex-1 min-w-0"><div class="truncate font-medium text-sm">${esc(s.name)}</div>
+      <div class="text-xs ${active?'text-orange-100':'text-slate-400'}">완료 ${cnt}건${pendTag}</div></div>
+      <button data-edit="${s.id}" class="text-xs opacity-70 hover:opacity-100 px-1" title="수정">✎</button>
+      <button data-del="${s.id}" class="text-xs opacity-70 hover:opacity-100 px-1" title="삭제">✕</button>
+    </div></li>`;
+  }).join('');
+  $('totalStat').textContent = `매장 ${stores.length}곳 · 누적 완료 ${history.length}건`;
+}
+
+function renderStoreHeader(){
+  const s = getStore();
+  const el = $('storeHeader');
+  if (!s) { el.innerHTML = '<div class="font-bold">👈 왼쪽에서 매장을 추가하거나 선택하세요.</div>'; return; }
+  const today = new Date().toDateString();
+  const todayCnt = history.filter(h => h.storeId === s.id && new Date(h.date).toDateString() === today).length;
+  const links = OWNER_SITES.map(x => `<a href="${x.url}" target="_blank" rel="noopener" class="text-xs bg-white/20 hover:bg-white/30 rounded-full px-3 py-1">${esc(x.name)} ↗</a>`).join('');
+  el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-3">
+    <div><div class="text-xs opacity-80">현재 작업 매장</div>
+      <div class="text-xl font-black">${esc(s.name)}</div>
+      <div class="text-sm opacity-90 mt-1">📞 ${esc(s.phone || '대표번호 미등록')} · 🍴 ${esc(s.menu || '대표메뉴 미등록')}</div></div>
+    <div class="text-right"><div class="text-xs opacity-80">오늘 처리</div><div class="text-3xl font-black">${todayCnt}<span class="text-base font-bold">건</span></div></div>
+  </div>
+  <div class="flex flex-wrap gap-2 mt-3">${links}</div>`;
+}
+
+$('storeList').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  const edit = e.target.closest('[data-edit]');
+  if (del) {
+    e.stopPropagation();
+    const s = storeById(del.dataset.del);
+    if (!confirm(`'${s.name}' 매장과 완료 내역, 미답변 리뷰를 모두 삭제할까요?`)) return;
+    stores = stores.filter(x => x.id !== s.id);
+    history = history.filter(h => h.storeId !== s.id);
+    pending = pending.filter(p => p.storeId !== s.id);
+    if (workingId && !pending.find(p => p.id === workingId)) resetForm();
+    if (selectedId === s.id) selectedId = stores[0]?.id || null;
+    persistAll(); renderAll(); toast('매장이 삭제되었습니다');
+    return;
+  }
+  if (edit) { e.stopPropagation(); openStoreForm(edit.dataset.edit); return; }
+  const item = e.target.closest('[data-id]');
+  if (item) {
+    if (workingId && item.dataset.id !== selectedId) resetForm();
+    selectedId = item.dataset.id; save(LS.sel, selectedId); renderAll();
+  }
+});
+
+function openStoreForm(id){
+  $('storeForm').classList.remove('hidden');
+  const s = id ? storeById(id) : null;
+  $('editingId').value = s ? s.id : '';
+  $('storeFormTitle').textContent = s ? '매장 정보 수정' : '새 매장 등록';
+  $('fName').value = s?.name || ''; $('fPhone').value = s?.phone || '';
+  $('fMenu').value = s?.menu || ''; $('fOwner').value = s?.owner || '';
+  $('fTone').value = s?.tone || 'friendly'; $('fFee').value = s?.fee || '';
+  $('fMemo').value = s?.memo || '';
+  $('fName').focus();
+}
+$('toggleStoreForm').onclick = () => $('storeForm').classList.contains('hidden') ? openStoreForm() : $('storeForm').classList.add('hidden');
+$('cancelStore').onclick = () => $('storeForm').classList.add('hidden');
+$('storeForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const data = { name:$('fName').value.trim(), phone:$('fPhone').value.trim(), menu:$('fMenu').value.trim(),
+                 owner:$('fOwner').value.trim(), tone:$('fTone').value, fee:+$('fFee').value || 0, memo:$('fMemo').value.trim() };
+  if (!data.name) return toast('매장명을 입력하세요', 'error');
+  const editId = $('editingId').value;
+  if (editId) { Object.assign(storeById(editId), data); toast('매장 정보가 수정되었습니다'); }
+  else { const s = { id: uid(), ...data }; stores.push(s); selectedId = s.id; toast('새 매장이 등록되었습니다'); }
+  $('storeForm').classList.add('hidden');
+  persistAll(); renderAll();
+});
+
+/* ========== API Key ========== */
+const getKey = () => load(LS.key, '') || $('apiKey').value.trim();
+function renderKeyStatus(){
+  const has = !!load(LS.key, '');
+  const st = $('keyStatus');
+  st.textContent = has ? '저장됨' : '미등록';
+  st.className = 'text-xs px-2 py-1 rounded-full ' + (has ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500');
+}
+$('apiKey').value = load(LS.key, '');
+$('saveKey').onclick = () => {
+  const k = $('apiKey').value.trim();
+  if (!k.startsWith('sk-')) return toast('올바른 OpenAI 키(sk-...)를 입력하세요', 'error');
+  save(LS.key, k); renderKeyStatus(); toast('API 키가 저장되었습니다');
+};
+$('clearKey').onclick = () => { localStorage.removeItem(LS.key); $('apiKey').value=''; renderKeyStatus(); toast('API 키가 삭제되었습니다'); };
+$('toggleKey').onclick = () => { const i=$('apiKey'); const show=i.type==='password'; i.type=show?'text':'password'; $('toggleKey').textContent=show?'숨김':'보기'; };
+
+/* ========== OpenAI ========== */
+async function callOpenAI(messages, { json=false, max_tokens=700, temperature=0.8 } = {}, retry = 1){
+  const key = getKey();
+  if (!key) throw new Error('OpenAI API 키를 먼저 저장해 주세요');
+  const body = { model:'gpt-4o-mini', temperature, max_tokens, messages };
+  if (json) body.response_format = { type:'json_object' };
+  let res;
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + key }, body: JSON.stringify(body)
+    });
+  } catch(e) { throw new Error('네트워크 오류입니다. 인터넷 연결을 확인해 주세요.'); }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 429 && retry > 0) { await new Promise(r => setTimeout(r, 2500)); return callOpenAI(messages, { json, max_tokens, temperature }, retry - 1); }
+    if (res.status === 401) throw new Error('API 키가 올바르지 않습니다. 키를 다시 확인해 주세요.');
+    if (res.status === 429) throw new Error('요청 한도 초과 또는 크레딧 부족입니다. OpenAI 결제 상태를 확인해 주세요.');
+    throw new Error(err.error?.message || ('오류 코드 ' + res.status));
+  }
+  const data = await res.json();
+  return (data.choices?.[0]?.message?.content || '').trim();
+}
+
+/* ========== Stars & Tone ========== */
+function renderStars(){
+  $('stars').innerHTML = [1,2,3,4,5].map(n =>
+    `<button type="button" data-star="${n}" class="star-btn ${n<=rating?'text-amber-400':'text-slate-300'}">★</button>`
+  ).join('') + `<span class="ml-2 text-sm font-bold ${rating<=3?'text-rose-500':'text-emerald-600'}">${rating}점 · ${rating<=3?'부정 리뷰':'긍정 리뷰'}</span>`;
+}
+$('stars').addEventListener('click', e => {
+  const b = e.target.closest('[data-star]'); if (!b) return;
+  rating = +b.dataset.star; renderStars();
+  const tone = $('tone');
+  if (rating <= 3) tone.value = 'apology';
+  else if (tone.value === 'apology') tone.value = getStore()?.tone || 'friendly';
+  saveDraft();
+});
+
+/* ========== Draft autosave ========== */
+function saveDraft(){
+  save(LS.draft, { platform:$('platform').value, nickname:$('nickname').value, review:$('reviewText').value, rating, tone:$('tone').value, reply:$('replyBox').value, workingId });
+}
+function loadDraft(){
+  const d = load(LS.draft, null); if (!d) return;
+  workingId = (d.workingId && pending.find(p => p.id === d.workingId)) ? d.workingId : null;
+  $('platform').value = d.platform || '배달의민족'; $('nickname').value = d.nickname || '';
+  $('reviewText').value = d.review || ''; rating = d.rating || 5; $('tone').value = d.tone || 'friendly';
+  if (d.reply) { $('replyBox').value = d.reply; $('outputCard').classList.remove('hidden'); updateCount(); }
+}
+['platform','nickname','reviewText','tone','replyBox'].forEach(id => $(id).addEventListener('input', saveDraft));
+$('tone').addEventListener('change', saveDraft); $('platform').addEventListener('change', saveDraft);
+
+/* ========== Prompt ========== */
+const SYSTEM_PROMPT = `너는 대한민국 최고의 소상공인 배달 전문점 친절 고객만족(CS) 매니저야.
+사장님의 말투를 완벽히 모사하여, 고객의 리뷰에 최적의 맞춤형 답글을 작성한다.
+
+[답글 작성 규칙]
+1. 오프닝: 고객의 닉네임을 부르며 반갑게 인사한다. 닉네임이 없으면 "고객님"이라고 부른다.
+2. 본문 분석: 고객이 언급한 메뉴나 맛, 상황(예: "족발이 쫄깃해요", "국물이 식어서 왔어요")을 정확히 지목해 언급한다. 리뷰에 없는 사실이나 메뉴를 지어내지 않는다.
+3. 부정 리뷰 대응(별점 1~3점):
+   - 변명하지 않고 고객의 불편에 먼저 공감하며 진심으로 사과한다.
+   - 구체적인 개선 조치를 명확히 밝힌다(예: 포장 보온 강화, 조리 시간 재점검).
+   - 매장 대표 번호로 연락 주시면 재발 방지와 보상을 약속한다. 보상 금액·환불을 구체적으로 확정하지 않는다.
+   - 고객을 탓하거나 반박하는 등 절대 감정적으로 대립하지 않는다.
+4. 긍정 리뷰 대응(별점 4~5점):
+   - 리뷰 속 특정 메뉴를 언급하며 음식에 대한 자부심과 깊은 감사를 표한다.
+   - "다음 주문 시 배달 봉투에 부착된 [단골 전용 스티커]를 확인해 주세요!"라는 멘트를 자연스럽게 녹인다.
+5. 분량 및 이모지: 공백 포함 200~300자 내외, 요청 톤에 맞게 이모지를 사용해 친근감을 준다.
+6. 사장님 말투 메모가 있으면 그 말투와 끝인사를 그대로 따른다.
+7. 별점을 조건으로 혜택을 약속하거나 높은 별점을 요구하는 문장은 절대 쓰지 않는다.
+8. 특이사항이 주어지면 반드시 따른다.
+
+[출력]
+오직 작성된 답글 텍스트만 출력한다. 따옴표, 제목, 부연 설명은 절대 넣지 않는다.`;
+
+function buildUserMessage(store, input){
+  const t = TONES[input.tone] || TONES.friendly;
+  const risk = classifyReview(input.review);
+  const notes = [];
+  if (risk.hygiene) notes.push('위생·이물질·건강 관련 불만이 있음 → 추측이나 단정 없이 진심으로 사과하고, 즉시 확인 중임을 밝히며 매장 대표 번호로 직접 연락을 요청. 원인 단정·책임 범위·보상 금액은 언급 금지.');
+  if (risk.abuse) notes.push('욕설·비방이 포함됨 → 감정적 대응이나 지적 없이 짧고 정중하게, 불편에 대한 사과와 개선 의지만 밝힘.');
+  if (!input.review.trim()) notes.push('리뷰 내용 없이 별점만 남김 → 주문에 대한 감사(또는 아쉬움에 대한 사과)를 짧게 표현.');
+  return `[입력 정보]
+- 매장명: ${store.name}
+- 매장 대표 번호: ${store.phone || '(미등록 - 번호 대신 "매장으로 연락 주세요"라고 안내)'}
+- 대표 메뉴: ${store.menu || '(미등록)'}
+- 사장님 말투 메모: ${store.memo || '(없음)'}
+- 배달 플랫폼: ${input.platform}
+- 고객 닉네임: ${input.nickname || '(없음)'}
+- 별점: ${input.rating}점 (${input.rating <= 3 ? '부정 리뷰 → 사과·개선·연락 유도' : '긍정 리뷰 → 감사·메뉴 언급·단골 스티커 멘트'})
+- 요청 톤앤매너: ${t.label} — ${t.guide}
+- 특이사항: ${notes.length ? notes.join(' / ') : '없음'}
+
+[고객 리뷰]
+${input.review || '(내용 없음)'}`;
+}
+
+async function generateReplyFor(store, input){
+  const out = await callOpenAI([
+    { role:'system', content: SYSTEM_PROMPT },
+    { role:'user', content: buildUserMessage(store, input) }
+  ], { max_tokens:600, temperature:0.8 });
+  const reply = out.replace(/^["“]|["”]$/g, '').trim();
+  if (!reply) throw new Error('답글이 비어 있습니다. 다시 시도해 주세요.');
+  return reply;
+}
+const autoTone = (store, r) => r <= 3 ? 'apology' : (store?.tone || 'friendly');
+
+/* ========== Generate (single) ========== */
+function setLoading(on){
+  ['genBtn','regenBtn'].forEach(id => $(id).disabled = on);
+  $('genLabel').innerHTML = on ? '<span class="flex items-center gap-2"><span class="spinner"></span>답글 작성 중...</span>' : '✨ AI 답글 생성';
+}
+function updateCount(){
+  $('charCount').textContent = `${$('replyBox').value.length}자`;
+  $('lintBox').innerHTML = lintChips(lintReply($('replyBox').value.trim(), rating, getStore()));
+}
+$('replyBox').addEventListener('input', () => {
+  updateCount();
+  const p = workingId && pending.find(x => x.id === workingId);
+  if (p) { p.reply = $('replyBox').value.trim(); save(LS.pend, pending); }
+});
+
+async function generate(){
+  const store = getStore();
+  if (!store) return toast('먼저 매장을 선택하거나 추가해 주세요', 'error');
+  const review = $('reviewText').value.trim();
+  if (!review) return toast('리뷰 내용을 입력해 주세요', 'error');
+  const input = { platform:$('platform').value, nickname:$('nickname').value.trim(), review, rating, tone:$('tone').value };
+  setLoading(true);
+  try {
+    const reply = await generateReplyFor(store, input);
+    $('replyBox').value = reply;
+    $('outputCard').classList.remove('hidden');
+    updateCount(); saveDraft();
+    const wp = workingId && pending.find(p => p.id === workingId);
+    if (wp) { wp.reply = reply; save(LS.pend, pending); renderTasks(); }
+    $('outputCard').scrollIntoView({ behavior:'smooth', block:'center' });
+  } catch (e) { toast(e.message, 'error'); }
+  finally { setLoading(false); }
+}
+$('genBtn').onclick = generate;
+$('regenBtn').onclick = generate;
+$('reviewText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); generate(); } });
+
+/* ========== Copy & Done ========== */
+async function copyText(text, msg = '클립보드에 복사되었습니다 📋'){
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  toast(msg);
+}
+$('copyBtn').onclick = () => { const t = $('replyBox').value.trim(); if (!t) return toast('복사할 답글이 없습니다', 'error'); copyText(t); };
+
+function needsApprovalConfirm(p){
+  return p && p.rating <= 3 && p.status !== 'approved' &&
+    !confirm('🔴 부정 리뷰인데 "사장님 승인 완료" 표시가 없습니다.\n그래도 완료 처리할까요?');
+}
+function moveToHistory(p, reply, tone){
+  history.push({ id:uid(), storeId:p.storeId, platform:p.platform, nickname:p.nickname || '',
+    rating:p.rating, tone, review:p.review, reply, date:Date.now() });
+  save(LS.hist, history);
+  pending = pending.filter(x => x.id !== p.id); save(LS.pend, pending);
+}
+
+$('doneBtn').onclick = () => {
+  const reply = $('replyBox').value.trim();
+  if (!reply) return toast('완료할 답글이 없습니다', 'error');
+  if (!getStore()) return toast('매장을 선택해 주세요', 'error');
+  const wp = workingId && pending.find(p => p.id === workingId);
+  if (needsApprovalConfirm(wp)) return;
+  if (wp) moveToHistory(wp, reply, $('tone').value);
+  else {
+    history.push({ id:uid(), storeId:selectedId, platform:$('platform').value, nickname:$('nickname').value.trim(),
+      rating, tone:$('tone').value, review:$('reviewText').value.trim(), reply, date:Date.now() });
+    save(LS.hist, history);
+  }
+  resetForm();
+  renderAll(); toast('완료 처리되었습니다 ✅');
+  $('reviewText').focus();
+};
+
+/* ========== History ========== */
+function fmtDate(t){
+  const d = new Date(t);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function renderHistory(){
+  const f = $('histFilter').value;
+  let list = history.filter(h => h.storeId === selectedId);
+  if (f === 'pos') list = list.filter(h => h.rating >= 4);
+  if (f === 'neg') list = list.filter(h => h.rating <= 3);
+  list.sort((a,b) => b.date - a.date);
+  $('histCount').textContent = `(${list.length}건)`;
+  if (!list.length) { $('historyList').innerHTML = '<div class="text-sm text-slate-400 text-center py-8">아직 완료된 답글이 없습니다.</div>'; return; }
+  $('historyList').innerHTML = list.slice(0,100).map(h => `<div class="border border-slate-200 rounded-xl p-4">
+      <div class="flex flex-wrap items-center gap-2 text-xs mb-2">
+        <span class="px-2 py-0.5 rounded-full font-bold ${PLATFORM_BADGE[h.platform]||'bg-slate-100'}">${esc(h.platform)}</span>
+        <span class="text-amber-500">${'★'.repeat(h.rating)}<span class="text-slate-300">${'★'.repeat(5-h.rating)}</span></span>
+        <span class="font-medium">${esc(h.nickname || '고객님')}</span>
+        <span class="text-slate-400">· ${esc(TONES[h.tone]?.label || '')}</span>
+        <span class="ml-auto text-slate-400">${fmtDate(h.date)}</span>
+      </div>
+      <div class="text-sm text-slate-500 line-clamp-2 mb-2">“${esc(h.review)}”</div>
+      <div class="text-sm bg-slate-50 rounded-lg p-3 whitespace-pre-wrap">${esc(h.reply)}</div>
+      <div class="flex gap-2 mt-2 justify-end">
+        <button data-copy="${h.id}" class="text-xs px-3 py-1.5 rounded-md bg-slate-900 text-white">복사</button>
+        <button data-hdel="${h.id}" class="text-xs px-3 py-1.5 rounded-md bg-slate-100">삭제</button>
+      </div>
+    </div>`).join('');
+}
+$('histFilter').addEventListener('change', renderHistory);
+$('historyList').addEventListener('click', e => {
+  const c = e.target.closest('[data-copy]'); const d = e.target.closest('[data-hdel]');
+  if (c) copyText(history.find(h => h.id === c.dataset.copy)?.reply || '');
+  if (d && confirm('이 내역을 삭제할까요?')) { history = history.filter(h => h.id !== d.dataset.hdel); save(LS.hist, history); renderAll(); }
+});
+
+/* ========== 오늘의 대행 작업 (미답변 스캔) ========== */
+function scanPending(){
+  const valid = new Set(stores.map(s => s.id));
+  const before = pending.length;
+  pending = pending.filter(p => valid.has(p.storeId));
+  if (pending.length !== before) save(LS.pend, pending);
+  return stores.map(s => {
+    const list = pending.filter(p => p.storeId === s.id);
+    return { s, total:list.length, neg:list.filter(p => p.rating <= 3).length };
+  }).filter(g => g.total > 0);
+}
+function priority(p){
+  const r = classifyReview(p.review);
+  if (r.hygiene) return 0;
+  if (p.rating <= 3) return 1;
+  if (r.abuse) return 2;
+  return 3;
+}
+
+function renderTasks(){
+  const groups = scanPending();
+  const negTotal = pending.filter(p => p.rating <= 3).length;
+  const hygTotal = pending.filter(p => classifyReview(p.review).hygiene).length;
+  const noReply = pending.filter(p => !p.reply).length;
+  document.title = pending.length ? `(${pending.length}) AI 리뷰 대응 대시보드` : 'AI 리뷰 대응 대시보드';
+  $('taskSummary').textContent = pending.length ? `미답변 ${pending.length}건 · 답글안 없음 ${noReply}건 · 매장 ${groups.length}곳` : '';
+  $('batchGenBtn').textContent = batchRunning ? '⏳ 생성 중...' : `⚡ 미답변 전체 AI 답글${noReply ? ` (${noReply})` : ''}`;
+  $('batchGenBtn').disabled = batchRunning;
+
+  const bar = $('alertBar');
+  if (negTotal || hygTotal) {
+    bar.classList.remove('hidden');
+    bar.textContent = `🔴 부정 리뷰 ${negTotal}건 감지 — 답글 게시 전 사장님 승인이 필요합니다.` + (hygTotal ? ` 🧪 위생 관련 ${hygTotal}건은 사장님이 직접 확인해야 합니다.` : '');
+  } else bar.classList.add('hidden');
+
+  if (!groups.length) {
+    $('taskStores').innerHTML = '';
+    $('pendingList').innerHTML = `<div class="text-sm text-slate-400 text-center py-6">🎉 미답변 리뷰가 없습니다.<br>
+      <b>[📥 리뷰 일괄 가져오기]</b>로 사장님 사이트 리뷰를 통째로 붙여넣으세요.</div>`;
+    return;
+  }
+  if (taskFilter !== 'all' && !groups.find(g => g.s.id === taskFilter)) taskFilter = 'all';
+
+  const chip = (id, label, total, neg) => {
+    const on = taskFilter === id;
+    return `<button data-tf="${id}" class="text-xs px-3 py-1.5 rounded-full border ${on ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 hover:bg-slate-50'}">
+      ${label} <b>${total}</b>${neg ? ` <span class="${on ? 'text-rose-300' : 'text-rose-600'} font-bold">🔴${neg}</span>` : ''}</button>`;
+  };
+  $('taskStores').innerHTML = chip('all', '전체', pending.length, negTotal) +
+    groups.map(g => chip(g.s.id, '🏪 ' + esc(g.s.name), g.total, g.neg)).join('');
+
+  let list = taskFilter === 'all' ? [...pending] : pending.filter(p => p.storeId === taskFilter);
+  list.sort((a,b) => (priority(a) - priority(b)) || (a.createdAt - b.createdAt));
+
+  $('pendingList').innerHTML = list.map(p => {
+    const neg = p.rating <= 3;
+    const risk = classifyReview(p.review);
+    const store = storeById(p.storeId);
+    const status = p.status === 'approved'
+      ? '<span class="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold">👍 승인 완료</span>'
+      : p.status === 'approval'
+        ? '<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">⏳ 사장님 승인 대기</span>'
+        : (p.reply ? '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">✍️ 답글안 있음</span>' : '');
+    const warns = p.reply ? lintReply(p.reply, p.rating, store) : [];
+    return `<div class="rounded-xl p-4 ${neg || risk.hygiene ? 'border-2 border-rose-500 bg-rose-50/50' : 'border border-slate-200'} ${workingId === p.id ? 'ring-2 ring-orange-400' : ''}">
+      <div class="flex flex-wrap items-center gap-2 text-xs mb-2">
+        ${neg ? '<span class="px-2 py-0.5 rounded-full bg-rose-600 text-white font-bold animate-pulse">🔴 경고: 사전 확인 필요</span>' : ''}
+        ${risk.hygiene ? '<span class="px-2 py-0.5 rounded-full bg-purple-600 text-white font-bold">🧪 위생 이슈 · 사장님 직접 확인</span>' : ''}
+        ${risk.abuse ? '<span class="px-2 py-0.5 rounded-full bg-slate-800 text-white font-bold" title="욕설·비방 리뷰는 플랫폼에 게시중단(블라인드) 요청을 검토할 수 있습니다">🚫 욕설 · 블라인드 요청 검토</span>' : ''}
+        <span class="font-bold text-slate-700">🏪 ${esc(store?.name)}</span>
+        <span class="px-2 py-0.5 rounded-full font-bold ${PLATFORM_BADGE[p.platform] || 'bg-slate-100'}">${esc(p.platform)}</span>
+        <span class="text-amber-500">${'★'.repeat(p.rating)}<span class="text-slate-300">${'★'.repeat(5 - p.rating)}</span></span>
+        <span class="font-medium">${esc(p.nickname || '고객님')}</span>
+        ${status}
+        <span class="ml-auto text-slate-400">${fmtDate(p.createdAt)}</span>
+      </div>
+      <div class="text-sm text-slate-700">“${esc(p.review || '(별점만 남긴 리뷰)')}”</div>
+      ${p.reply ? `<div class="mt-2 text-xs bg-white border border-slate-200 rounded-lg p-2 whitespace-pre-wrap text-slate-600"><b>답글안</b> · ${esc(p.reply)}</div>` : ''}
+      ${warns.length ? `<div class="flex flex-wrap gap-1.5 mt-2">${lintChips(warns)}</div>` : ''}
+      <div class="flex flex-wrap gap-2 mt-3 justify-end">
+        ${neg && p.status !== 'approved' ? `<button data-approve="${p.id}" class="text-xs px-3 py-1.5 rounded-md bg-yellow-300 hover:bg-yellow-400 text-slate-900 font-bold">💬 사장님께 카톡 승인 요청 문구 복사</button>` : ''}
+        ${neg && p.status === 'approval' ? `<button data-approved="${p.id}" class="text-xs px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold">👍 승인 받음</button>` : ''}
+        ${p.reply ? `<button data-quick="${p.id}" class="text-xs px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-700 text-white font-bold">📋 복사 + 완료</button>` : ''}
+        <button data-work="${p.id}" class="text-xs px-3 py-1.5 rounded-md bg-orange-500 hover:bg-orange-600 text-white font-bold">✍️ ${p.reply ? '열어서 수정' : '답글 작성'}</button>
+        <button data-pdel="${p.id}" class="text-xs px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function ownerCall(s){ return s?.owner || '사장님'; }
+function approvalMessage(p){
+  const s = storeById(p.storeId);
+  let msg = `${ownerCall(s)}, ${p.nickname || '고객'}님 건 사과 답글안 확인 부탁드립니다.\n\n` +
+            `[${s?.name || ''} · ${p.platform} · ★${p.rating}점]\n리뷰: "${p.review}"`;
+  msg += p.reply
+    ? `\n\n📝 답글안:\n${p.reply}\n\n괜찮으시면 "승인"이라고 답장 주세요 🙏`
+    : `\n\n답글안은 작성되는 대로 바로 보내드리겠습니다 🙏`;
+  return msg;
+}
+function bulkApprovalMessage(storeId){
+  const s = storeById(storeId);
+  const list = pending.filter(p => p.storeId === storeId && p.rating <= 3 && p.status !== 'approved');
+  const lines = list.map((p, i) =>
+    `${i+1}) ${p.nickname || '고객'}님 (${p.platform} ★${p.rating})\n리뷰: "${p.review}"\n답글안: ${p.reply || '(작성 중)'}`).join('\n\n');
+  return { list, text: `${ownerCall(s)}, [${s?.name}] 사과 답글안 ${list.length}건 확인 부탁드립니다 🙏\n\n${lines}\n\n` +
+    `수정이 필요한 번호만 알려주시고, 괜찮으시면 "전체 승인"이라고 답장 주세요.` };
+}
+
+function renderBanner(){
+  const b = $('workingBanner');
+  const p = workingId && pending.find(x => x.id === workingId);
+  if (!p) { workingId = null; b.className = 'hidden'; b.innerHTML = ''; return; }
+  const s = storeById(p.storeId);
+  const neg = p.rating <= 3;
+  b.className = 'flex flex-wrap items-center gap-2 rounded-xl px-4 py-3 text-sm ' +
+    (neg ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-orange-50 border border-orange-200 text-orange-700');
+  b.innerHTML = `<span class="font-bold">${neg ? '🔴' : '🟠'} 대기열 작업 중</span>
+    <span>${esc(s?.name || '')} · ${esc(p.nickname || '고객님')} · ★${p.rating}</span>
+    <button id="cancelWork" class="ml-auto text-xs underline">작업 취소</button>`;
+  $('cancelWork').onclick = () => { resetForm(); renderAll(); };
+}
+
+function resetForm(){
+  $('reviewText').value = ''; $('nickname').value = ''; $('replyBox').value = '';
+  rating = 5; $('tone').value = getStore()?.tone || 'friendly'; renderStars();
+  $('outputCard').classList.add('hidden'); $('lintBox').innerHTML = '';
+  workingId = null; renderBanner();
+  localStorage.removeItem(LS.draft);
+}
+
+function startWork(id){
+  const p = pending.find(x => x.id === id); if (!p) return;
+  selectedId = p.storeId; save(LS.sel, selectedId);
+  workingId = id;
+  $('platform').value = p.platform; $('nickname').value = p.nickname || '';
+  $('reviewText').value = p.review; rating = p.rating;
+  $('tone').value = autoTone(storeById(p.storeId), p.rating);
+  $('replyBox').value = p.reply || '';
+  $('outputCard').classList.toggle('hidden', !p.reply);
+  renderStars(); renderBanner(); renderAll(); updateCount(); saveDraft();
+  $('genSection').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+$('taskStores').addEventListener('click', e => {
+  const b = e.target.closest('[data-tf]'); if (!b) return;
+  taskFilter = b.dataset.tf; renderTasks();
+});
+
+$('pendingList').addEventListener('click', e => {
+  const get = attr => { const el = e.target.closest(`[${attr}]`); return el ? pending.find(x => x.id === el.getAttribute(attr)) : null; };
+  const ap = get('data-approve'), ok = get('data-approved'), qk = get('data-quick'), wk = get('data-work'), dl = get('data-pdel');
+  if (ap) {
+    copyText(approvalMessage(ap), '승인 요청 문구 복사 완료 → 사장님 카톡에 붙여넣으세요');
+    ap.status = 'approval'; save(LS.pend, pending); renderTasks();
+    if (!ap.reply) setTimeout(() => toast('답글안이 아직 없어요. [✍️ 답글 작성] 후 다시 보내세요', 'error'), 1500);
+  }
+  if (ok) { ok.status = 'approved'; save(LS.pend, pending); renderTasks(); toast('👍 승인 완료로 표시했습니다'); }
+  if (qk) {
+    if (needsApprovalConfirm(qk)) return;
+    copyText(qk.reply, '답글 복사 완료 → 사장님 사이트 답글 칸에 붙여넣으세요');
+    if (workingId === qk.id) resetForm();
+    moveToHistory(qk, qk.reply, autoTone(storeById(qk.storeId), qk.rating));
+    renderAll();
+  }
+  if (wk) startWork(wk.id);
+  if (dl && confirm('이 미답변 리뷰를 대기열에서 삭제할까요?')) {
+    pending = pending.filter(p => p.id !== dl.id);
+    save(LS.pend, pending);
+    if (workingId === dl.id) resetForm();
+    renderAll();
+  }
+});
+
+$('queueBtn').onclick = () => {
+  if (!getStore()) return toast('먼저 매장을 선택하거나 추가해 주세요', 'error');
+  const review = $('reviewText').value.trim();
+  if (!review) return toast('리뷰 내용을 입력해 주세요', 'error');
+  const data = { storeId:selectedId, platform:$('platform').value, nickname:$('nickname').value.trim(),
+                 rating, review, reply:$('replyBox').value.trim() };
+  const existing = workingId && pending.find(p => p.id === workingId);
+  if (!existing && isDuplicate(data)) return toast('이미 등록되었거나 처리한 리뷰입니다 (중복)', 'error');
+  if (existing) Object.assign(existing, data);
+  else pending.push({ id:uid(), ...data, status:'pending', createdAt:Date.now() });
+  save(LS.pend, pending);
+  const neg = rating <= 3;
+  resetForm(); renderAll();
+  toast(neg ? '🔴 부정 리뷰로 대기열에 등록되었습니다' : '📥 대기열에 등록되었습니다', neg ? 'error' : 'ok');
+  $('taskSection').scrollIntoView({ behavior:'smooth', block:'start' });
+};
+
+/* ========== 일괄 AI 답글 생성 ========== */
+async function runPool(items, n, fn){
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; await fn(items[idx], idx); }
+  }));
+}
+async function batchGenerate(ids){
+  if (batchRunning) return;
+  if (!getKey()) return toast('OpenAI API 키를 먼저 저장해 주세요', 'error');
+  const targets = pending.filter(p => !p.reply && (!ids || ids.includes(p.id)) && storeById(p.storeId));
+  if (!targets.length) return toast('답글안이 없는 미답변 리뷰가 없습니다');
+  batchRunning = true; renderTasks();
+  let done = 0, fail = 0, lastErr = '';
+  const prog = () => {
+    $('batchProg').classList.remove('hidden');
+    $('batchLabel').textContent = `AI 답글 생성 중 ${done + fail}/${targets.length}` + (fail ? ` (실패 ${fail})` : '');
+    const pct = Math.round((done + fail) / targets.length * 100);
+    $('batchPct').textContent = pct + '%'; $('batchBar').style.width = pct + '%';
+  };
+  prog();
+  await runPool(targets, 3, async p => {
+    try {
+      const store = storeById(p.storeId);
+      p.reply = await generateReplyFor(store, { platform:p.platform, nickname:p.nickname, review:p.review, rating:p.rating, tone:autoTone(store, p.rating) });
+      done++; save(LS.pend, pending); renderTasks();
+    } catch(e) { fail++; lastErr = e.message; }
+    prog();
+  });
+  batchRunning = false; renderAll();
+  setTimeout(() => $('batchProg').classList.add('hidden'), 1500);
+  if (fail) toast(`완료 ${done}건 · 실패 ${fail}건 (${lastErr})`, 'error');
+  else {
+    const negs = pending.filter(p => p.rating <= 3 && p.reply && p.status === 'pending').length;
+    toast(`✅ 답글안 ${done}건 생성 완료` + (negs ? ` · 부정 ${negs}건은 승인요청을 보내세요` : ''));
+  }
+}
+$('batchGenBtn').onclick = () => batchGenerate();
+
+$('bulkApproveBtn').onclick = () => {
+  let storeId = taskFilter !== 'all' ? taskFilter : null;
+  if (!storeId) {
+    const ids = [...new Set(pending.filter(p => p.rating <= 3 && p.status !== 'approved').map(p => p.storeId))];
+    if (!ids.length) return toast('승인 요청할 부정 리뷰가 없습니다');
+    if (ids.length > 1) return toast('매장마다 사장님이 다릅니다. 위 매장 칩을 눌러 매장을 먼저 고르세요', 'error');
+    storeId = ids[0];
+  }
+  const { list, text } = bulkApprovalMessage(storeId);
+  if (!list.length) return toast('이 매장에 승인 요청할 부정 리뷰가 없습니다');
+  copyText(text, `${list.length}건 묶음 승인요청 복사 완료 → 사장님 카톡에 붙여넣으세요`);
+  list.forEach(p => p.status = 'approval'); save(LS.pend, pending); renderTasks();
+  if (list.some(p => !p.reply)) setTimeout(() => toast('답글안 없는 건이 섞여 있어요. 먼저 [⚡ 전체 AI 답글]을 권장합니다', 'error'), 1800);
+};
+
+/* ========== 리뷰 붙여넣기 분석기 (무료, 로컬) ========== */
+/*PARSER_START*/
+function localParse(text){
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/ /g, ' ').trim());
+  const DATE_RE = /^(\d{2,4}\s?[.\-/년]\s?\d{1,2}\s?[.\-/월]\s?\d{1,2}\s?일?\.?|\d{1,2}월\s?\d{1,2}일|오늘|어제|그저께|\d+\s?(분|시간|일|주|개월|달)\s?전)/;
+  const NOISE_RE = /^(신고(하기)?|답글|댓글|사장님\s?(댓글|답글)\s?(달기|쓰기|작성|등록)|(답글|댓글)\s?(달기|쓰기|작성|등록|수정|삭제)|더보기|접기|수정|삭제|좋아요|도움돼요|도움이 돼요|사진|전체|최신순|별점순|리뷰\s?\d*|맛|양|배달|포장|\d+)$/;
+  const OWNER_RE = /^(사장님|사장님\s?(댓글|답글)|사장님의?\s?(댓글|답글))\s*[:：]?/;
+  const MENU_RE = /(\d+\s?개|[x×]\s?\d|\d\s?인분|세트|\((대|중|소|L|M|S)\)|\/\s*\S+\s*\/|·.+·)/;
+  const isSentence = l => /[.!?~ㅋㅎㅠㅜ^]$|(요|다|음|함|네|죠|군|당|용|쥬|ㅎ)$/.test(l);
+  const isMenu = l => l.length < 70 && MENU_RE.test(l) && !isSentence(l);
+  const isNick = l => l.length >= 1 && l.length <= 16 && !/[.!?~,]/.test(l) && !DATE_RE.test(l) && !isMenu(l) && !/사장님/.test(l) && !NOISE_RE.test(l);
+  const ratingOf = l => {
+    if (!l || !/[★⭐☆\d]/.test(l)) return 0;
+    if (!/^(별점\s*[:：]?\s*)?[★☆⭐\s]*(\d(\.\d)?)?\s*(점|\/\s*5)?\s*[★☆⭐\s]*$/.test(l)) return 0;
+    const f = (l.match(/[★⭐]/g) || []).length;
+    if (f) return Math.min(5, f);
+    if (!/(점|별점|\/\s*5)/.test(l)) return 0;
+    const m = l.match(/\d(\.\d)?/);
+    if (m) { const v = Math.round(+m[0]); if (v >= 1 && v <= 5) return v; }
+    return 0;
+  };
+
+  const recs = []; const pre = []; let cur = null;
+  for (const l of lines) {
+    if (!l) continue;
+    let r = ratingOf(l), nickInline = '', rest = '';
+    if (!r) {
+      const m = l.match(/^(.{1,20}?)\s*([★⭐][★☆⭐]{2,4})\s*(.*)$/);
+      if (m) { r = (m[2].match(/[★⭐]/g) || []).length; nickInline = m[1].trim(); rest = m[3].trim(); }
+    }
+    if (r) {
+      let nick = nickInline;
+      if (!nick) {
+        const pool = cur ? (cur.ownerMode ? cur.ownerLines : cur.text) : pre;
+        let k = pool.length - 1;
+        while (k >= 0 && DATE_RE.test(pool[k])) k--;
+        if (k >= 0 && isNick(pool[k])) { nick = pool[k]; pool.splice(k, 1); }
+      }
+      cur = { nickname: nick, rating: r, text: [], menu: [], date: '', owner: false, ownerMode: false, ownerLines: [] };
+      if (rest && DATE_RE.test(rest)) cur.date = rest;
+      recs.push(cur); continue;
+    }
+    if (!cur) { pre.push(l); continue; }
+    if (cur.ownerMode) { cur.ownerLines.push(l); continue; }
+    if (NOISE_RE.test(l)) continue;
+    if (OWNER_RE.test(l)) { cur.owner = true; cur.ownerMode = true; continue; }
+    if (DATE_RE.test(l)) { if (!cur.date) cur.date = l; continue; }
+    if (isMenu(l)) { cur.menu.push(l); continue; }
+    cur.text.push(l);
+  }
+
+  let out = recs.map(c => ({
+    nickname: c.nickname, rating: c.rating, review: c.text.join(' ').replace(/\s+/g, ' ').trim(),
+    menu: c.menu.join(', '), date: c.date, has_owner_reply: c.owner
+  }));
+
+  if (!out.length) {
+    out = String(text || '').replace(/\r/g, '').split(/\n\s*\n/).map(b => {
+      const ls = b.split('\n').map(x => x.trim()).filter(x => x && !NOISE_RE.test(x) && !DATE_RE.test(x));
+      if (!ls.length) return null;
+      let nick = '';
+      if (ls.length > 1 && isNick(ls[0])) nick = ls.shift();
+      return { nickname: nick, rating: 0, review: ls.join(' ').trim(), menu: '', date: '', has_owner_reply: false };
+    }).filter(Boolean);
+  }
+  return out.filter(x => x.review || x.rating);
+}
+/*PARSER_END*/
+
+/* ========== 일괄 가져오기 모달 ========== */
+let impRows = [], impImages = [], impTab = 'text';
+
+function openImport(){
+  $('impStore').innerHTML = stores.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if (!stores.length) return toast('먼저 매장을 추가해 주세요', 'error');
+  $('impStore').value = (taskFilter !== 'all' && storeById(taskFilter)) ? taskFilter : (selectedId || stores[0].id);
+  $('impAutoGen').checked = !!getKey();
+  setImpTab(impTab);
+  $('importModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeImport(){ $('importModal').classList.add('hidden'); document.body.style.overflow = ''; }
+$('openImport').onclick = openImport;
+$('closeImport').onclick = closeImport;
+$('importModal').addEventListener('click', e => { if (e.target === $('importModal') || e.target === $('importModal').firstElementChild) closeImport(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('importModal').classList.contains('hidden')) closeImport(); });
+
+function setImpTab(t){
+  impTab = t;
+  document.querySelectorAll('.imp-tab').forEach(b => b.className = 'imp-tab flex-1 rounded-lg py-2 ' + (b.dataset.tab === t ? 'bg-white shadow-sm' : 'text-slate-500'));
+  $('tabText').classList.toggle('hidden', t !== 'text');
+  $('tabImage').classList.toggle('hidden', t !== 'image');
+}
+document.querySelectorAll('.imp-tab').forEach(b => b.onclick = () => setImpTab(b.dataset.tab));
+
+function setRows(rows){
+  const storeId = $('impStore').value, platform = $('impPlatform').value;
+  const seen = new Set();
+  impRows = rows.map(r => {
+    const row = { nickname:(r.nickname || '').trim(), rating: Math.max(0, Math.min(5, Math.round(+r.rating || 0))),
+      review:(r.review || '').trim(), menu:r.menu || '', date:r.date || '', ownerReplied: !!r.has_owner_reply };
+    const k = normKey({ storeId, platform, ...row });
+    row.dup = isDuplicate({ storeId, platform, ...row }) || seen.has(k);
+    seen.add(k);
+    row.sel = !row.dup && !row.ownerReplied;
+    return row;
+  });
+  renderImpRows();
+}
+
+function renderImpRows(){
+  if (!impRows.length) { $('impPreview').innerHTML = ''; $('impFooter').classList.add('hidden'); return; }
+  $('impFooter').classList.remove('hidden');
+  $('impPreview').innerHTML = impRows.map((r, i) => {
+    const risk = classifyReview(r.review);
+    const badges = [
+      r.dup ? '<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">중복(이미 등록·처리)</span>' : '',
+      r.ownerReplied ? '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">이미 사장님 답글 있음</span>' : '',
+      !r.rating ? '<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">별점 확인 필요</span>' : '',
+      r.rating && r.rating <= 3 ? '<span class="px-2 py-0.5 rounded-full bg-rose-600 text-white font-bold">🔴 부정</span>' : '',
+      risk.hygiene ? '<span class="px-2 py-0.5 rounded-full bg-purple-600 text-white">🧪 위생</span>' : '',
+      risk.abuse ? '<span class="px-2 py-0.5 rounded-full bg-slate-800 text-white">🚫 욕설</span>' : '',
+      r.menu ? `<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">🍴 ${esc(r.menu)}</span>` : ''
+    ].join('');
+    return `<div class="border ${r.sel ? 'border-orange-300 bg-orange-50/40' : 'border-slate-200 opacity-70'} rounded-xl p-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="checkbox" data-i="${i}" data-f="sel" class="w-4 h-4" ${r.sel ? 'checked' : ''}>
+        <input data-i="${i}" data-f="nickname" value="${esc(r.nickname)}" placeholder="닉네임" class="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm">
+        <select data-i="${i}" data-f="rating" class="rounded-md border ${r.rating ? 'border-slate-300' : 'border-amber-400 bg-amber-50'} px-2 py-1 text-sm">
+          <option value="0" ${!r.rating ? 'selected' : ''}>별점?</option>
+          ${[5,4,3,2,1].map(n => `<option value="${n}" ${r.rating === n ? 'selected' : ''}>${'★'.repeat(n)} ${n}점</option>`).join('')}
+        </select>
+        <div class="flex flex-wrap gap-1 text-[11px]">${badges}</div>
+      </div>
+      <textarea data-i="${i}" data-f="review" rows="2" class="mt-2 w-full rounded-md border border-slate-300 px-2 py-1 text-sm">${esc(r.review)}</textarea>
+    </div>`;
+  }).join('');
+  updateImpCount();
+}
+function updateImpCount(){
+  const sel = impRows.filter(r => r.sel);
+  const neg = sel.filter(r => r.rating && r.rating <= 3).length;
+  const skipped = impRows.length - sel.length;
+  $('impCount').textContent = `총 ${impRows.length}건 중 ${sel.length}건 선택` + (neg ? ` · 부정 ${neg}건` : '') + (skipped ? ` · 제외 ${skipped}건` : '');
+}
+$('impPreview').addEventListener('input', e => {
+  const el = e.target; const i = +el.dataset.i, f = el.dataset.f;
+  if (isNaN(i) || !f) return;
+  const r = impRows[i];
+  if (f === 'sel') { r.sel = el.checked; renderImpRows(); return; }
+  if (f === 'rating') { r.rating = +el.value; renderImpRows(); return; }
+  r[f] = el.value;
+});
+$('impPreview').addEventListener('change', e => { if (e.target.dataset.f === 'sel' || e.target.dataset.f === 'rating') e.target.dispatchEvent(new Event('input', { bubbles:true })); });
+
+$('parseLocal').onclick = () => {
+  const t = $('impText').value.trim();
+  if (!t) return toast('붙여넣은 내용이 없습니다', 'error');
+  const rows = localParse(t);
+  setRows(rows);
+  const noRating = rows.filter(r => !r.rating).length;
+  $('impStatus').textContent = rows.length
+    ? `⚡ ${rows.length}건을 찾았습니다.` + (noRating ? ` 별점을 못 찾은 ${noRating}건은 직접 골라 주세요.` : '') + ' 결과가 이상하면 [🤖 AI 정밀 분석]을 눌러보세요.'
+    : '리뷰를 찾지 못했습니다. [🤖 AI 정밀 분석] 또는 스크린샷 탭을 이용해 주세요.';
+};
+
+const EXTRACT_PROMPT = `너는 배달앱(배달의민족·요기요·쿠팡이츠) 사장님 관리 화면에서 복사한 텍스트 또는 캡처 이미지에서 "고객 리뷰"만 정확히 뽑아내는 도구다.
+반드시 JSON으로만 답한다. 형식:
+{"reviews":[{"nickname":"고객 닉네임","rating":5,"review":"고객이 쓴 리뷰 본문","menu":"주문 메뉴(있으면)","date":"작성일(있으면)","has_owner_reply":false}]}
+규칙:
+- rating은 1~5 정수. 채워진 별 개수나 숫자로 판단하고, 도저히 알 수 없으면 0.
+- 사장님(가게)이 단 답글은 review에 넣지 말고, 이미 사장님 답글이 달려 있으면 has_owner_reply를 true로.
+- 메뉴판, 버튼, 광고, 통계, 안내 문구는 무시.
+- 리뷰 본문 없이 별점만 있으면 review는 빈 문자열.
+- 글자를 고치거나 요약하지 말고 원문 그대로 옮긴다.`;
+
+async function aiExtract(content){
+  const out = await callOpenAI([
+    { role:'system', content: EXTRACT_PROMPT },
+    { role:'user', content }
+  ], { json:true, max_tokens:4000, temperature:0 });
+  let data;
+  try { data = JSON.parse(out); } catch(e) { throw new Error('AI 응답을 해석하지 못했습니다. 다시 시도해 주세요.'); }
+  return Array.isArray(data.reviews) ? data.reviews : [];
+}
+function setBusy(btn, on, label){
+  btn.disabled = on;
+  if (on) { btn.dataset.label = btn.innerHTML; btn.innerHTML = `<span class="inline-flex items-center gap-2"><span class="spinner"></span>${label}</span>`; }
+  else if (btn.dataset.label) btn.innerHTML = btn.dataset.label;
+}
+
+$('parseAI').onclick = async () => {
+  const t = $('impText').value.trim();
+  if (!t) return toast('붙여넣은 내용이 없습니다', 'error');
+  setBusy($('parseAI'), true, '분석 중...');
+  $('impStatus').textContent = '🤖 AI가 리뷰를 나누고 있습니다...';
+  try {
+    const chunks = []; for (let i = 0; i < t.length; i += 12000) chunks.push(t.slice(i, i + 12000));
+    let all = [];
+    for (const c of chunks) all = all.concat(await aiExtract(`[복사한 텍스트]\n${c}`));
+    setRows(all);
+    $('impStatus').textContent = `🤖 ${all.length}건을 찾았습니다. 아래에서 확인 후 등록하세요.`;
+  } catch(e) { $('impStatus').textContent = ''; toast(e.message, 'error'); }
+  finally { setBusy($('parseAI'), false); }
+};
+
+/* 스크린샷 */
+function addImageFile(file){
+  if (!file || !file.type.startsWith('image/')) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const W = Math.min(1100, img.width), scale = W / img.width, H = Math.round(img.height * scale);
+      const SLICE = 1800;
+      for (let y = 0; y < H; y += SLICE - 120) {
+        const h = Math.min(SLICE, H - y);
+        const c = document.createElement('canvas'); c.width = W; c.height = h;
+        c.getContext('2d').drawImage(img, 0, y / scale, img.width, h / scale, 0, 0, W, h);
+        impImages.push(c.toDataURL('image/jpeg', 0.85));
+        if (y + h >= H) break;
+      }
+      renderThumbs();
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(file);
+}
+function renderThumbs(){
+  $('impThumbs').innerHTML = impImages.map((src, i) => `<div class="relative"><img src="${src}" class="h-20 rounded-lg border object-cover">
+    <button data-rm="${i}" class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-slate-900 text-white text-xs leading-5">×</button></div>`).join('')
+    + (impImages.length ? `<div class="text-xs text-slate-500 self-end">${impImages.length}장 (긴 캡처는 자동 분할)</div>` : '');
+}
+$('impThumbs').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { impImages.splice(+b.dataset.rm, 1); renderThumbs(); } });
+$('impFiles').addEventListener('change', e => { [...e.target.files].forEach(addImageFile); e.target.value = ''; });
+const dz = $('dropZone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', e => [...e.dataTransfer.files].forEach(addImageFile));
+document.addEventListener('paste', e => {
+  if ($('importModal').classList.contains('hidden')) return;
+  const files = [...(e.clipboardData?.items || [])].filter(it => it.type.startsWith('image/')).map(it => it.getAsFile());
+  if (files.length) { e.preventDefault(); setImpTab('image'); files.forEach(addImageFile); toast(`이미지 ${files.length}장 추가됨`); }
+});
+
+$('parseImage').onclick = async () => {
+  if (!impImages.length) return toast('스크린샷을 먼저 넣어주세요', 'error');
+  setBusy($('parseImage'), true, '이미지 읽는 중...');
+  try {
+    let all = [];
+    for (let i = 0; i < impImages.length; i += 3) {
+      $('impStatus').textContent = `🤖 이미지 분석 중... (${Math.min(i + 3, impImages.length)}/${impImages.length})`;
+      const content = [{ type:'text', text:'아래 캡처 이미지들에서 고객 리뷰를 모두 추출해 JSON으로 답해줘.' }]
+        .concat(impImages.slice(i, i + 3).map(url => ({ type:'image_url', image_url:{ url, detail:'high' } })));
+      all = all.concat(await aiExtract(content));
+    }
+    setRows(all);
+    $('impStatus').textContent = `🤖 ${all.length}건을 찾았습니다. 겹친 부분의 중복은 자동으로 제외됩니다.`;
+  } catch(e) { $('impStatus').textContent = ''; toast(e.message, 'error'); }
+  finally { setBusy($('parseImage'), false); }
+};
+
+$('impStore').addEventListener('change', () => impRows.length && setRows(impRows.map(r => ({ ...r, has_owner_reply:r.ownerReplied }))));
+$('impPlatform').addEventListener('change', () => impRows.length && setRows(impRows.map(r => ({ ...r, has_owner_reply:r.ownerReplied }))));
+
+$('impRegister').onclick = () => {
+  const sel = impRows.filter(r => r.sel);
+  if (!sel.length) return toast('선택된 리뷰가 없습니다', 'error');
+  const noRating = sel.filter(r => !r.rating).length;
+  if (noRating) return toast(`별점이 비어 있는 ${noRating}건의 별점을 골라 주세요`, 'error');
+  const storeId = $('impStore').value, platform = $('impPlatform').value;
+  const newIds = []; let dups = 0;
+  sel.forEach(r => {
+    const item = { id:uid(), storeId, platform, nickname:r.nickname, rating:r.rating, review:r.review, reply:'', status:'pending', createdAt:Date.now() };
+    if (isDuplicate(item)) { dups++; return; }
+    pending.push(item); newIds.push(item.id);
+  });
+  save(LS.pend, pending);
+  const neg = sel.filter(r => r.rating <= 3).length;
+  impRows = []; impImages = []; $('impText').value = ''; $('impStatus').textContent = '';
+  renderImpRows(); renderThumbs(); closeImport();
+  taskFilter = storeId; renderAll();
+  toast(`📥 ${newIds.length}건 등록` + (neg ? ` · 🔴 부정 ${neg}건` : '') + (dups ? ` · 중복 ${dups}건 제외` : ''));
+  if ($('impAutoGen').checked && newIds.length) batchGenerate(newIds);
+};
+
+/* ========== 리포트 & 정산 ========== */
+function periodStart(p){
+  const d = new Date();
+  if (p === 'today') { d.setHours(0,0,0,0); return d.getTime(); }
+  if (p === 'week') return Date.now() - 7 * 864e5;
+  d.setDate(1); d.setHours(0,0,0,0); return d.getTime();
+}
+function buildReport(storeId, period){
+  const s = storeById(storeId); if (!s) return '';
+  const label = { today:'오늘', week:'최근 7일', month:`${new Date().getMonth()+1}월` }[period];
+  const done = history.filter(h => h.storeId === storeId && h.date >= periodStart(period));
+  const pos = done.filter(h => h.rating >= 4).length, neg = done.length - pos;
+  const avg = done.length ? (done.reduce((a, h) => a + h.rating, 0) / done.length).toFixed(1) : '-';
+  const menus = (s.menu || '').split(/[,·/]/).map(t => t.trim()).filter(Boolean);
+  const counts = menus.map(m => {
+    const key = m.split(/\s+/).pop();
+    return [m, done.filter(h => h.review.includes(m) || (key.length >= 2 && h.review.includes(key))).length];
+  }).filter(x => x[1]).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const negList = done.filter(h => h.rating <= 3).slice(0, 5)
+    .map(h => `· ${h.nickname || '고객'}님(★${h.rating}) "${h.review.slice(0, 22)}${h.review.length > 22 ? '…' : ''}" → 사과·개선 답글 완료`);
+  const waiting = pending.filter(p => p.storeId === storeId).length;
+  return `📊 [${s.name}] 리뷰 관리 리포트 (${label})\n\n` +
+    `✅ 답글 완료 ${done.length}건 (긍정 ${pos} · 부정 ${neg})\n⭐ 처리한 리뷰 평균 별점 ${avg}\n` +
+    (counts.length ? `🍴 리뷰에서 많이 언급된 메뉴: ${counts.map(([m, c]) => `${m}(${c})`).join(', ')}\n` : '') +
+    (negList.length ? `\n🔴 부정 리뷰 대응\n${negList.join('\n')}\n` : '') +
+    `\n⏳ 현재 미답변 ${waiting}건\n\n앞으로도 꼼꼼히 관리하겠습니다 🙏`;
+}
+function renderReport(){
+  const s = getStore();
+  $('repPreview').textContent = s ? buildReport(s.id, $('repPeriod').value) : '매장을 선택하세요.';
+  const since = periodStart('month');
+  const rows = stores.map(st => ({ st, n: history.filter(h => h.storeId === st.id && h.date >= since).length }));
+  const total = rows.reduce((a, r) => a + (r.st.fee || 0), 0);
+  $('billing').innerHTML = `<div class="divide-y border rounded-lg">${rows.map(r =>
+    `<div class="flex items-center justify-between px-3 py-2"><span>🏪 ${esc(r.st.name)}</span>
+     <span class="text-slate-500">${r.n}건 · <b class="text-slate-800">${r.st.fee ? r.st.fee.toLocaleString() + '원' : '대행료 미설정'}</b></span></div>`).join('')}
+    <div class="flex items-center justify-between px-3 py-2 bg-slate-50 font-bold"><span>합계 (월)</span><span>${total.toLocaleString()}원</span></div></div>`;
+}
+$('repPeriod').addEventListener('change', renderReport);
+$('repCopy').onclick = () => { const s = getStore(); if (!s) return toast('매장을 선택하세요', 'error'); copyText(buildReport(s.id, $('repPeriod').value), '리포트 복사 완료 → 사장님 카톡에 붙여넣으세요'); };
+
+/* ========== Backup ========== */
+function renderBackupWarn(){
+  const last = load(LS.backup, 0);
+  const days = last ? Math.floor((Date.now() - last) / 864e5) : null;
+  const el = $('backupWarn');
+  if ((history.length || pending.length) && (days === null || days >= 7)) {
+    el.classList.remove('hidden');
+    el.textContent = days === null ? '💾 아직 백업한 적이 없어요. 브라우저 기록 삭제 시 데이터가 사라집니다.' : `💾 마지막 백업 ${days}일 전 — 백업을 권장합니다.`;
+  } else el.classList.add('hidden');
+}
+$('exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify({ stores, history, pending, exportedAt:new Date().toISOString() }, null, 2)], { type:'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `리뷰대시보드_백업_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(a.href);
+  save(LS.backup, Date.now()); renderBackupWarn();
+};
+$('importFile').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!Array.isArray(d.stores) || !Array.isArray(d.history)) throw 0;
+      if (!confirm('현재 데이터를 백업 파일로 덮어쓸까요?')) return;
+      stores = d.stores; history = d.history; pending = Array.isArray(d.pending) ? d.pending : [];
+      selectedId = stores[0]?.id || null; workingId = null; renderBanner();
+      persistAll(); renderAll(); toast('복원되었습니다');
+    } catch(err){ toast('올바른 백업 파일이 아닙니다', 'error'); }
+  };
+  r.readAsText(file); e.target.value = '';
+});
+
+/* ========== Init ========== */
+function persistAll(){ save(LS.stores, stores); save(LS.hist, history); save(LS.sel, selectedId); save(LS.pend, pending); }
+function renderAll(){ renderStores(); renderStoreHeader(); renderTasks(); renderHistory(); renderReport(); renderBackupWarn(); }
+
+/* 접속 즉시 자동 스캔 + 사전 알림 */
+document.addEventListener('DOMContentLoaded', () => {
+  loadDraft(); renderStars(); renderKeyStatus(); renderBanner(); renderAll(); updateCount();
+  const neg = pending.filter(p => p.rating <= 3).length;
+  const hyg = pending.filter(p => classifyReview(p.review).hygiene).length;
+  if (pending.length) {
+    toast((hyg ? `🧪 위생 이슈 ${hyg}건 · ` : '') + (neg ? `🔴 부정 리뷰 ${neg}건 포함 · ` : '') + `미답변 ${pending.length}건이 있습니다`, (neg || hyg) ? 'error' : 'ok');
+  }
+});
+</script>
+</body>
+</html>
