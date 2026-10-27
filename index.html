@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="author" content="구경GO 윤남주">
+<meta name="copyright" content="© 2026 구경GO 윤남주">
+<link rel="icon" type="image/png" href="logo.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>리뷰&스티커 · AI 리뷰 답글 & 감성 스티커 자동화</title>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -125,14 +128,17 @@
   <!-- ===== Left: Copy ===== -->
   <section class="text-center lg:text-left order-1">
     <!-- Logo badge -->
-    <div class="fade-up inline-flex items-center gap-3 bg-white/80 backdrop-blur rounded-full pl-2 pr-4 py-2 shadow-sm border border-white" style="animation-delay:.05s">
-      <span class="relative w-10 h-10 rounded-2xl bg-gradient-to-br from-navy-700 to-navy-500 flex items-center justify-center shadow-md">
+    <div class="fade-up inline-flex items-center gap-2 sm:gap-3 bg-white/80 backdrop-blur rounded-full pl-2 pr-4 py-2 shadow-sm border border-white" style="animation-delay:.05s">
+      <span class="gg-logo relative w-12 h-12 shrink-0 rounded-full shadow-md overflow-hidden" style="display:inline-block;width:48px;height:48px;min-width:48px"><img src="logo.png" alt="구경GO" class="absolute inset-0 w-full h-full object-cover rounded-full" onerror="this.remove()"><svg viewBox="0 0 100 100" width="40" height="40" style="display:block;width:100%;height:100%" role="img" aria-label="구경GO 로고"><defs><linearGradient id="ggGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7d774"/><stop offset=".5" stop-color="#d4a017"/><stop offset="1" stop-color="#a87708"/></linearGradient></defs><circle cx="50" cy="50" r="48" fill="url(#ggGold)"/><circle cx="50" cy="50" r="41" fill="none" stroke="#fff6d6" stroke-width="2"/><text x="50" y="42" text-anchor="middle" font-family="Noto Sans KR,sans-serif" font-weight="900" font-size="20" fill="#3b2a00">구경</text><text x="50" y="70" text-anchor="middle" font-family="Arial Black,Noto Sans KR,sans-serif" font-weight="900" font-size="30" fill="#3b2a00">GO</text></svg></span>
+      <span class="font-black text-sm text-amber-700 whitespace-nowrap">구경GO</span>
+      <span class="w-px h-5 bg-slate-300"></span>
+      <span class="relative hidden sm:flex w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-br from-navy-700 to-navy-500 items-center justify-center shadow-md">
         <i class="fa-solid fa-star text-yellow-300 text-sm"></i>
         <span class="absolute -bottom-1 -right-1 w-5 h-5 rounded-lg bg-orange-500 flex items-center justify-center shadow">
           <i class="fa-solid fa-tag text-white text-[9px]"></i>
         </span>
       </span>
-      <span class="text-sm font-bold text-navy-800">소상공인 배달 매장 전용 자동화</span>
+      <span class="text-xs sm:text-sm font-bold text-navy-800 whitespace-nowrap">소상공인 배달 매장 전용 자동화</span>
     </div>
 
     <h1 class="fade-up font-display text-6xl sm:text-7xl md:text-8xl mt-6 leading-none tracking-tight" style="animation-delay:.15s">
@@ -278,7 +284,7 @@
   </section>
 </main>
 
-<footer class="relative z-10 text-center text-xs text-slate-400 pb-6">© 리뷰&amp;스티커 · 배민 · 요기요 · 쿠팡이츠 사장님을 위한 AI 자동화</footer>
+<footer class="relative z-10 text-center text-xs text-slate-500 pb-6 px-4 leading-relaxed">© 2026 구경GO 윤남주. All rights reserved.<br>리뷰&amp;스티커 · 작성자 구경GO 윤남주 · 무단 복제·배포·판매를 금합니다.</footer>
 
 <script>
   // Typing loop for AI reply bubble
